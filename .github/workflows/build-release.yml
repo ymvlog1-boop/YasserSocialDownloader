@@ -22,7 +22,17 @@ jobs:
         run: |
           $parts = Get-ChildItem 'bootstrap/source.part*.b64' | Sort-Object Name
           if ($parts.Count -lt 3) { throw 'Source bundle is incomplete.' }
-          $encoded = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          foreach ($p in $parts) {
+            $text = Get-Content $p.FullName -Raw
+            Write-Host "$($p.Name) length=$($text.Length)"
+          }
+          $encoded = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join '') -replace '\s',''
+          Write-Host "encoded length=$($encoded.Length) expected=75868"
+          if ($encoded.Length -ne 75868) { throw "Unexpected encoded length $($encoded.Length)" }
+          if ($encoded -notmatch '^[A-Za-z0-9+/]*={0,2}$') { throw 'Invalid base64 characters.' }
+          $sha = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($encoded))).Replace('-','').ToLowerInvariant()
+          Write-Host "encoded sha256=$sha expected=78cec99a7b3a56624450b3056c09931ae6b38c226e6da6d39d820b32f21f6327"
+          if ($sha -ne '78cec99a7b3a56624450b3056c09931ae6b38c226e6da6d39d820b32f21f6327') { throw 'Source bundle hash mismatch.' }
           [IO.File]::WriteAllBytes('source.zip', [Convert]::FromBase64String($encoded))
           Expand-Archive -Path 'source.zip' -DestinationPath '.' -Force
           if (!(Test-Path 'requirements.txt') -or !(Test-Path 'build.py') -or !(Test-Path 'app/updater.py')) { throw 'Source restore failed.' }
@@ -63,5 +73,3 @@ jobs:
           } else {
             gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "تحديث تلقائي لـ Yasser Social Downloader."
           }
-
-# v1.1.0 bootstrap bundle complete

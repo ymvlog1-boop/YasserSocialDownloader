@@ -20,8 +20,11 @@ jobs:
       - name: Restore v1.1.0 source bundle
         shell: pwsh
         run: |
-          $parts = Get-ChildItem 'bootstrap/source.part*.b64' | Sort-Object Name
-          if ($parts.Count -lt 3) { throw 'Source bundle is incomplete.' }
+          $parts = @(
+            Get-Item 'bootstrap/source.part00.00.b64'
+            Get-Item 'bootstrap/source.part00.01.b64'
+            Get-Item 'bootstrap/source.part01.b64'
+          ) + @(Get-ChildItem 'bootstrap/source.part02.*.b64' | Sort-Object Name)
           foreach ($p in $parts) {
             $text = Get-Content $p.FullName -Raw
             Write-Host "$($p.Name) length=$($text.Length)"

@@ -32,10 +32,12 @@ jobs:
           [IO.File]::WriteAllBytes('source.zip', [Convert]::FromBase64String($encoded))
           Expand-Archive -Path 'source.zip' -DestinationPath '.' -Force
           if (!(Test-Path 'requirements.txt') -or !(Test-Path 'build.py') -or !(Test-Path 'app/updater.py')) { throw 'Source restore failed.' }
-          # Windows temp paths can be represented as 8.3 aliases. Compare file identity instead of string spelling.
           $test = Get-Content 'tests/test_updater.py' -Raw
           $test = $test.Replace("self.assertEqual(updated_engine(root,'video'),str(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))", "self.assertTrue(Path(updated_engine(root,'video')).samefile(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))")
           Set-Content 'tests/test_updater.py' $test -Encoding UTF8
+
+      - name: Apply v1.1.1 patch
+        run: python patches/v1.1.1.py
 
       - uses: actions/setup-python@v5
         with:
@@ -71,5 +73,5 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag YasserSocialDownloader-Windows-x64.zip --clobber
           } else {
-            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "تحديث تلقائي لـ Yasser Social Downloader."
+            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "تحديث داخلي: تحسين اكتشاف فيديوهات فيسبوك، تحسين صوت تيك توك، وإضافة بيانات التواصل."
           }

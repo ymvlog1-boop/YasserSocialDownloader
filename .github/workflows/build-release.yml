@@ -63,3 +63,5 @@ jobs:
           } else {
             gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "تحديث تلقائي لـ Yasser Social Downloader."
           }
+
+# v1.1.0 bootstrap bundle complete

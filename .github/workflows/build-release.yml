@@ -39,6 +39,22 @@ jobs:
       - name: Apply v1.1.1 patch
         run: python patches/v1.1.1.py
 
+      - name: Apply v1.2.0 updater overlay
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem 'patches/v120/source.part*.b64' | Sort-Object Name
+          if ($parts.Count -ne 3) { throw 'v1.2.0 patch bundle is incomplete.' }
+          $encoded = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join '') -replace '\s',''
+          if ($encoded.Length -ne 11016) { throw "Unexpected v1.2.0 patch length $($encoded.Length)" }
+          $encodedSha = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($encoded))).Replace('-','').ToLowerInvariant()
+          if ($encodedSha -ne '6b3a2c7bfb62e75a37516e1722834c63b1a9b2d1e2142a949fa379ad61f27ec6') { throw 'v1.2.0 base64 patch hash mismatch.' }
+          [IO.File]::WriteAllBytes('v120-patch.zip', [Convert]::FromBase64String($encoded))
+          $zipSha = (Get-FileHash 'v120-patch.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($zipSha -ne '27b4077be916db605429d1166e91244224f72efb2d06615c6443fd508fd66e21') { throw 'v1.2.0 patch ZIP hash mismatch.' }
+          Expand-Archive -Path 'v120-patch.zip' -DestinationPath '.' -Force
+          $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
+          if ($version -ne '1.2.0') { throw "Unexpected version $version" }
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -54,6 +70,17 @@ jobs:
 
       - name: Build
         run: python build.py
+
+      - name: Verify Windows binaries
+        shell: pwsh
+        run: |
+          $app = Resolve-Path 'dist/YasserSocialDownloader/YasserSocialDownloader.exe'
+          $updater = Resolve-Path 'dist/YasserSocialDownloader/YasserUpdater.exe'
+          if (!(Test-Path $app) -or !(Test-Path $updater)) { throw 'Expected Windows executables were not built.' }
+          $p = Start-Process -FilePath $app -ArgumentList '--version-check' -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Application version check failed: $($p.ExitCode)" }
+          $u = Start-Process -FilePath $updater -ArgumentList '--help' -PassThru -Wait
+          if ($u.ExitCode -ne 0) { throw "Updater executable self-check failed: $($u.ExitCode)" }
 
       - name: Read version and package
         id: pkg
@@ -73,5 +100,5 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag YasserSocialDownloader-Windows-x64.zip --clobber
           } else {
-            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "تحديث داخلي: تحسين اكتشاف فيديوهات فيسبوك، تحسين صوت تيك توك، وإضافة بيانات التواصل."
+            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "إصلاح أساسي لنظام التحديث الذاتي: أداة تحديث خارجية مستقلة، نسخة احتياطية، rollback عند الفشل، وإعادة تشغيل موثوقة. يتضمن أيضًا إصلاحات Facebook/TikTok وبيانات التواصل من v1.1.1."
           }

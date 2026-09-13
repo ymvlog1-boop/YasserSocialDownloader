@@ -55,6 +55,14 @@ jobs:
           $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
           if ($version -ne '1.2.0') { throw "Unexpected version $version" }
 
+      - name: Apply direct media overlay
+        shell: pwsh
+        run: |
+          Copy-Item overlays/direct/app/* app/ -Force
+          Copy-Item overlays/direct/tests/* tests/ -Force
+          $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
+          if ($version -ne '1.3.0') { throw "Unexpected version $version" }
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -100,5 +108,5 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag YasserSocialDownloader-Windows-x64.zip --clobber
           } else {
-            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "إصلاح أساسي لنظام التحديث الذاتي: أداة تحديث خارجية مستقلة، نسخة احتياطية، rollback عند الفشل، وإعادة تشغيل موثوقة. يتضمن أيضًا إصلاحات Facebook/TikTok وبيانات التواصل من v1.1.1."
+            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "إضافة تحميل صور وفيديو من روابط HTTPS مباشرة يزوّدها المستخدم، مع استكمال الأجزاء ومنع التكرار. لا يشمل جمع محتوى الصفحات أو الحسابات من مواقع غير مدعومة."
           }

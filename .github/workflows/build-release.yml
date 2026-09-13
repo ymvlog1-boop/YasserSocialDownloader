@@ -11,8 +11,17 @@ permissions:
   contents: write
 
 jobs:
+  withdraw_v130:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Withdraw v1.3.0 release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete withdrawn release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete v1.3.0 --yes --cleanup-tag --repo ymvlog1-boop/YasserSocialDownloader
+
   build:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.event.head_commit.message != 'Withdraw v1.3.0 release'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +108,7 @@ jobs:
           Compress-Archive -Path 'dist/YasserSocialDownloader/*' -DestinationPath 'YasserSocialDownloader-Windows-x64.zip' -Force
 
       - name: Publish GitHub Release
+        if: steps.pkg.outputs.version != '1.3.0'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

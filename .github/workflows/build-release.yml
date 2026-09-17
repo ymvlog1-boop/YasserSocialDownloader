@@ -64,13 +64,13 @@ jobs:
           $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
           if ($version -ne '1.2.0') { throw "Unexpected version $version" }
 
-      - name: Apply v1.2.2 tested overlay
+      - name: Apply v1.2.3 tested overlay
         shell: pwsh
         run: |
-          Copy-Item overlays/v122/app/* app/ -Force
-          Copy-Item overlays/v122/tests/* tests/ -Force
+          Copy-Item overlays/v123/app/* app/ -Force
+          Copy-Item overlays/v123/tests/* tests/ -Force
           $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
-          if ($version -ne '1.2.2') { throw "Unexpected version $version" }
+          if ($version -ne '1.2.3') { throw "Unexpected version $version" }
 
       - uses: actions/setup-python@v5
         with:
@@ -117,6 +117,5 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag YasserSocialDownloader-Windows-x64.zip --clobber
           } else {
-            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "يفصل تنزيل كل بروفايل داخل مجلد باسم المستخدم على إنستغرام وإكس وتيك توك وفيسبوك. يصلح فيديوهات إنستغرام الصامتة عبر استخدام الفيديو المدمج بالصوت، ويمنع ملفات الصوت المنفصلة مثل .m4a."
+            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "فحص تلقائي صامت عند فتح البرنامج. إذا توفر إصدار أحدث يعرض رقم الإصدار ويطلب موافقة المستخدم قبل تنزيله أو تثبيته. يمكن اختيار لاحقًا دون تغيير أي ملف. يتضمن إصلاحات مجلدات البروفايلات وصوت فيديو إنستغرام من v1.2.2."
           }
-

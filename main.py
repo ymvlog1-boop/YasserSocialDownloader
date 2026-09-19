@@ -3,7 +3,8 @@ from pathlib import Path
 
 def main():
     if '--version-check' in sys.argv:
-        return
+        from app.version import APP_VERSION
+        print(APP_VERSION); return
     if len(sys.argv)>2 and sys.argv[1]=='--engine':
         # Windowed builds have no console streams. Reopen inherited QProcess pipes.
         if sys.stdout is None: sys.stdout=open(1,'w',encoding='utf-8',errors='replace',buffering=1,closefd=False)

@@ -27,7 +27,8 @@ class Window(QMainWindow):
         self.pages=QStackedWidget(); layout.addWidget(side); layout.addWidget(self.pages,1); self.nav=[]; self.selected_task_ids={}
         for i,title in enumerate(['⌂  الرئيسية','↓  قائمة التحميل','◷  سجل التحميلات','◈  إدارة الكوكيز','⚙  الإعدادات','ⓘ  حول البرنامج']):
             b=button(title,lambda checked=False,i=i:self.go(i)); b.setCheckable(True); self.nav.append(b); nav.addWidget(b)
-        nav.addStretch(); nav.addWidget(label('محلي • دون طلب بيانات الدخول\nWindows 10 / 11  ·  v1.2.4','muted'))
+        from .version import APP_VERSION
+        nav.addStretch(); nav.addWidget(label('محلي • دون طلب بيانات الدخول\nWindows 10 / 11  ·  v'+APP_VERSION,'muted'))
         self.home(); self.queue_page(); self.history_page(); self.cookies_page(); self.settings_page(); self.about_page()
         self.refresh_timer=QTimer(self);self.refresh_timer.setSingleShot(True);self.refresh_timer.setInterval(120);self.refresh_timer.timeout.connect(self.refresh)
         self.manager.changed.connect(self.schedule_refresh); self.go(0); self.refresh()

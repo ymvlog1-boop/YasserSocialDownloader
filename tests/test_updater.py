@@ -8,7 +8,7 @@ class UpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);folder=root/'engines';folder.mkdir();exe=folder/'test.exe';exe.write_bytes(b'fixture')
             manifest=folder/'current.json';manifest.write_text(json.dumps({'video':{'path':str(exe),'sha256':hashlib.sha256(b'fixture').hexdigest()}}))
-            self.assertEqual(updated_engine(root,'video'),str(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))
+            self.assertTrue(Path(updated_engine(root,'video')).samefile(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))
     def test_path_escape(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);folder=root/'engines';folder.mkdir();exe=root/'outside.exe';exe.write_bytes(b'fixture')

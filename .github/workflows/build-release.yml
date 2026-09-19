@@ -1,121 +1,53 @@
-name: Build Windows Release
+name: Build and release Windows application
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'README.md'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  withdraw_v130:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Withdraw v1.3.0 release'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete withdrawn release and tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release delete v1.3.0 --yes --cleanup-tag --repo ymvlog1-boop/YasserSocialDownloader
-
   build:
-    if: github.actor != 'github-actions[bot]' && github.event.head_commit.message != 'Withdraw v1.3.0 release'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Restore v1.1.0 source bundle
-        shell: pwsh
-        run: |
-          $parts = @(
-            Get-Item 'bootstrap/source.part00.00.b64'
-            Get-Item 'bootstrap/source.part00.01.b64'
-            Get-Item 'bootstrap/source.part01.b64'
-          ) + @(Get-ChildItem 'bootstrap/source.part02.*.b64' | Sort-Object Name)
-          $encoded = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join '') -replace '\s',''
-          if ($encoded.Length -ne 75868) { throw "Unexpected encoded length $($encoded.Length)" }
-          $sha = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($encoded))).Replace('-','').ToLowerInvariant()
-          if ($sha -ne '78cec99a7b3a56624450b3056c09931ae6b38c226e6da6d39d820b32f21f6327') { throw 'Source bundle hash mismatch.' }
-          [IO.File]::WriteAllBytes('source.zip', [Convert]::FromBase64String($encoded))
-          Expand-Archive -Path 'source.zip' -DestinationPath '.' -Force
-          if (!(Test-Path 'requirements.txt') -or !(Test-Path 'build.py') -or !(Test-Path 'app/updater.py')) { throw 'Source restore failed.' }
-          $test = Get-Content 'tests/test_updater.py' -Raw
-          $test = $test.Replace("self.assertEqual(updated_engine(root,'video'),str(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))", "self.assertTrue(Path(updated_engine(root,'video')).samefile(exe));exe.write_bytes(b'changed');self.assertIsNone(updated_engine(root,'video'))")
-          Set-Content 'tests/test_updater.py' $test -Encoding UTF8
-
-      - name: Apply v1.1.1 patch
-        run: python patches/v1.1.1.py
-
-      - name: Apply v1.2.0 updater overlay
-        shell: pwsh
-        run: |
-          $parts = Get-ChildItem 'patches/v120/source.part*.b64' | Sort-Object Name
-          if ($parts.Count -ne 3) { throw 'v1.2.0 patch bundle is incomplete.' }
-          $encoded = (($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join '') -replace '\s',''
-          if ($encoded.Length -ne 11016) { throw "Unexpected v1.2.0 patch length $($encoded.Length)" }
-          $encodedSha = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::ASCII.GetBytes($encoded))).Replace('-','').ToLowerInvariant()
-          if ($encodedSha -ne '6b3a2c7bfb62e75a37516e1722834c63b1a9b2d1e2142a949fa379ad61f27ec6') { throw 'v1.2.0 base64 patch hash mismatch.' }
-          [IO.File]::WriteAllBytes('v120-patch.zip', [Convert]::FromBase64String($encoded))
-          $zipSha = (Get-FileHash 'v120-patch.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($zipSha -ne '27b4077be916db605429d1166e91244224f72efb2d06615c6443fd508fd66e21') { throw 'v1.2.0 patch ZIP hash mismatch.' }
-          Expand-Archive -Path 'v120-patch.zip' -DestinationPath '.' -Force
-          $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
-          if ($version -ne '1.2.0') { throw "Unexpected version $version" }
-
-      - name: Apply v1.2.4 tested overlay
-        shell: pwsh
-        run: |
-          Copy-Item overlays/v124/app/* app/ -Force
-          Copy-Item overlays/v124/tests/* tests/ -Force
-          $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
-          if ($version -ne '1.2.4') { throw "Unexpected version $version" }
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+          architecture: x64
       - name: Install dependencies
-        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Test
+          python -m pip install -r requirements.txt
+      - name: Run tests
         run: python -m unittest discover -s tests -v
-
-      - name: Build
+      - name: Build application
         run: python build.py
-
-      - name: Verify Windows binaries
+      - name: Verify executable
         shell: pwsh
         run: |
-          $app = Resolve-Path 'dist/YasserSocialDownloader/YasserSocialDownloader.exe'
-          $updater = Resolve-Path 'dist/YasserSocialDownloader/YasserUpdater.exe'
-          if (!(Test-Path $app) -or !(Test-Path $updater)) { throw 'Expected Windows executables were not built.' }
-          $p = Start-Process -FilePath $app -ArgumentList '--version-check' -PassThru -Wait
-          if ($p.ExitCode -ne 0) { throw "Application version check failed: $($p.ExitCode)" }
-          $u = Start-Process -FilePath $updater -ArgumentList '--help' -PassThru -Wait
-          if ($u.ExitCode -ne 0) { throw "Updater executable self-check failed: $($u.ExitCode)" }
-
-      - name: Read version and package
-        id: pkg
-        shell: pwsh
-        run: |
+          $app = 'dist/YasserSocialDownloader/YasserSocialDownloader.exe'
+          if (!(Test-Path $app)) { throw 'Windows executable was not built.' }
           $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Compress-Archive -Path 'dist/YasserSocialDownloader/*' -DestinationPath 'YasserSocialDownloader-Windows-x64.zip' -Force
-
-      - name: Publish GitHub Release
+          if ($version -ne '1.2.5') { throw "Unexpected source version: $version" }
+          $process = Start-Process -FilePath $app -ArgumentList '--version-check' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Executable version check failed: $($process.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YasserSocialDownloader-Windows-x64-v1.2.5
+          path: dist/YasserSocialDownloader/
+          if-no-files-found: error
+      - name: Package update and publish release
+        if: github.event_name != 'pull_request'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v${{ steps.pkg.outputs.version }}"
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag YasserSocialDownloader-Windows-x64.zip --clobber
-          } else {
-            gh release create $tag YasserSocialDownloader-Windows-x64.zip --title "Yasser Social Downloader $tag" --notes "إصلاح اختفاء تحديد المهمة أثناء تحديث تقدم التحميل. يبقى الصف محددًا، وتعمل أزرار الإيقاف المؤقت والإلغاء مباشرة على المهمة المختارة. يتضمن الفحص التلقائي الاختياري للتحديث وإصلاحات الإصدارات السابقة."
-          }
+          $version = python -c "from app.version import APP_VERSION; print(APP_VERSION)"
+          $tag = "v$version"
+          Compress-Archive -Path 'dist/YasserSocialDownloader/*' -DestinationPath 'YasserSocialDownloader-Windows-x64.zip' -Force
+          gh release create $tag 'YasserSocialDownloader-Windows-x64.zip' --title "Yasser Social Downloader $tag" --notes-file "CHANGES-$tag.md" --target $env:GITHUB_SHA

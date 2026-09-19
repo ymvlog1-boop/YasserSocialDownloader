@@ -55,8 +55,7 @@ class ManagerTests(unittest.TestCase):
             calls.append((task.get('phase','primary'),'gallery'))
             return [sys.executable,'-c','pass'],'gallery'
         with patch('app.manager.command',side_effect=fake_command):
-            self.manager.pump();wait(lambda:t.get('phase')=='instagram_reels' and t['state']=='queued')
-            self.manager.pump();wait(lambda:t['state']=='empty')
+            self.manager.pump();wait(lambda:t['state']=='empty' and t['attempt']==2,seconds=15)
         self.assertEqual(calls,[('primary','gallery'),('instagram_reels','gallery')])
         self.assertEqual(t['attempt'],2);self.assertEqual(t['engine'],'gallery')
     def test_archive_skip(self):

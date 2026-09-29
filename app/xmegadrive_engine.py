@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-import requests
+try:
+    from curl_cffi import requests as http_requests
+    CURL_CFFI = True
+except ImportError:
+    import requests as http_requests
+    CURL_CFFI = False
 
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0 Safari/537.36'
@@ -14,7 +19,7 @@ MEDIA_URL_RE = re.compile(r'https?://[^"\'<>\s]+?\.(?:m3u8|mp4)(?:\?[^"\'<>\s]*)
 
 
 def _session(cookiefile=None):
-    s = requests.Session()
+    s = http_requests.Session(impersonate='chrome') if CURL_CFFI else http_requests.Session()
     s.headers.update({'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.8'})
     if cookiefile:
         from http.cookiejar import MozillaCookieJar
@@ -38,14 +43,21 @@ def _links(page_url, text):
         yield urljoin(page_url, raw)
 
 
+def _same_site(hostname, root_host):
+    hostname = (hostname or '').lower()
+    return hostname == root_host or hostname.endswith('.' + root_host)
+
+
 def _is_video_url(url, host):
     p = urlsplit(url)
-    return p.hostname and p.hostname.lower().endswith(host) and re.search(r'/(?:videos?|watch)/', p.path, re.I)
+    return _same_site(p.hostname, host) and re.search(r'/(?:videos?|watch)/', p.path, re.I)
 
 
 def _discover_tag(session, start_url, max_pages=250):
     start = urlsplit(start_url)
     host = (start.hostname or '').lower()
+    if host.startswith('www.'):
+        host = host[4:]
     tag_prefix = start.path.rstrip('/') + '/'
     queue = [start_url]
     seen_pages, videos = set(), []
@@ -66,10 +78,10 @@ def _discover_tag(session, start_url, max_pages=250):
                 normalized = link.split('#', 1)[0]
                 if normalized not in videos:
                     videos.append(normalized)
-            elif p.hostname and p.hostname.lower().endswith(host):
+            elif _same_site(p.hostname, host):
                 path = p.path.rstrip('/') + '/'
                 same_tag = path.startswith(tag_prefix)
-                looks_page = re.search(r'(?:/page/\d+/|[?&]page=\d+)', link, re.I)
+                looks_page = re.search(r'(?:/page/\d+/|/\d+/|[?&](?:page|paged|p)=\d+)', link, re.I)
                 if same_tag and looks_page and link not in seen_pages and link not in queue:
                     queue.append(link)
         # Fallback for sites that render relative video paths outside href attributes.

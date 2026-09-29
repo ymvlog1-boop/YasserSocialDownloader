@@ -23,6 +23,8 @@ def is_profile_url(platform, url):
         # Profile/page roots and /videos are profile-like. Individual reel/watch/posts are not.
         lower = [p.lower() for p in parts]
         return not any(p in ('reel', 'reels', 'watch', 'photo.php', 'posts', 'videos.php') for p in lower[1:]) and 'watch' not in lower[:1]
+    if platform == 'xmegadrive':
+        return len(parts) >= 2 and parts[0].lower() in ('tags', 'tag')
     return False
 
 
@@ -43,7 +45,9 @@ def profile_username(platform, url):
         return None
     parsed = urlsplit(url)
     parts = _path_parts(url)
-    if platform == 'tiktok':
+    if platform == 'xmegadrive':
+        candidate = parts[1] if len(parts) > 1 else 'xmegadrive'
+    elif platform == 'tiktok':
         candidate = parts[0].lstrip('@')
     elif platform == 'facebook' and parts and parts[0].lower() == 'profile.php':
         candidate = parse_qs(parsed.query).get('id', ['facebook-profile'])[0]
@@ -248,7 +252,9 @@ def command(task, store, cookie_path=None):
     target_url = task['url']
     profile = is_profile_url(task['platform'], task['url'])
 
-    if phase == 'facebook_videos':
+    if task.get('platform') == 'xmegadrive':
+        engine = 'xmegadrive'
+    elif phase == 'facebook_videos':
         engine = 'facebook'
     elif phase == 'facebook_video_ytdlp':
         # Backward compatibility for tasks saved by v1.0.7. Route them to the new
@@ -284,6 +290,13 @@ def command(task, store, cookie_path=None):
         args = _gallery_args(task, store, cookie_path if task['cookies'] else None, target_url)
     elif engine == 'video':
         args = _video_args(task, store, cookie_path if task['cookies'] else None, target_url)
+    elif engine == 'xmegadrive':
+        folder = Path(task['folder']); folder.mkdir(parents=True, exist_ok=True)
+        args = ['--url', task['url'], '--folder', str(folder), '--archive', str(store.root / ('archive-' + task['id'] + '-xmegadrive.txt')), '--quality', task['quality']]
+        if cookie_path and task['cookies']:
+            args += ['--cookies', cookie_path]
+        if task['force']:
+            args += ['--force']
     else:
         folder = Path(task['folder']); folder.mkdir(parents=True, exist_ok=True)
         args = [
@@ -305,6 +318,9 @@ def engine_main(kind, args):
         raise SystemExit(gallery_dl.main())
     if kind == 'facebook':
         from .facebook_engine import run
+        raise SystemExit(run(args))
+    if kind == 'xmegadrive':
+        from .xmegadrive_engine import run
         raise SystemExit(run(args))
     import yt_dlp
     yt_dlp.main(args)

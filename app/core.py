@@ -3,8 +3,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from http.cookiejar import MozillaCookieJar
 
-PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك'}
-DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok'}
+PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك', 'xmegadrive': 'XMegaDrive'}
+DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok','xmegadrive.com':'xmegadrive'}
 STATES = {'queued':'بانتظار التحميل','running':'جاري التحميل','paused':'تم الإيقاف مؤقتًا','completed':'تم التحميل بنجاح','partial':'اكتمل جزئيًا','failed':'فشل التحميل','cancelled':'تم الإلغاء','skipped':'محمّل مسبقًا','empty':'لم تُوجد ملفات جديدة'}
 
 def detect(url):
@@ -20,7 +20,7 @@ def detect(url):
     for domain, platform in DOMAINS.items():
         if host == domain or host.endswith('.'+domain):
             return platform, urlunsplit(('https',host,p.path,p.query,''))
-    raise ValueError('الرابط غير مدعوم. استخدم رابطًا من المنصات الأربع.')
+    raise ValueError('الرابط غير مدعوم. استخدم رابطًا من المنصات المدعومة.')
 
 def cookie_check(path, platform):
     try:

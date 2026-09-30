@@ -113,6 +113,71 @@ def _direct_media(session, page_url):
     return found
 
 
+def _valid_new_files(folder, before):
+    valid = []
+    for p in Path(folder).rglob('*'):
+        if not p.is_file() or p.resolve() in before or p.suffix.lower() in ('.part', '.ytdl'):
+            continue
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if size >= 128 * 1024:
+            valid.append(p.resolve())
+        else:
+            sys.stderr.write(f'Downloader: rejected incomplete media file ({size} bytes): {p}\n')
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    return valid
+
+
+def _download_direct_session(session, media_url, page_url, folder, force=False):
+    if '.mp4' not in urlsplit(media_url).path.lower():
+        return None
+    match = re.search(r'/video/(\d+)', urlsplit(page_url).path, re.I)
+    media_id = match.group(1) if match else Path(urlsplit(media_url).path).stem
+    target = Path(folder) / f'{media_id}___YID___{media_id}.mp4'
+    temp = target.with_suffix(target.suffix + '.part')
+    if target.exists():
+        if target.stat().st_size >= 128 * 1024 and not force:
+            return target.resolve()
+        target.unlink(missing_ok=True)
+    temp.unlink(missing_ok=True)
+    headers = {
+        'User-Agent': UA,
+        'Referer': page_url,
+        'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.5',
+        'Range': 'bytes=0-',
+    }
+    try:
+        response = session.get(media_url, headers=headers, timeout=60, allow_redirects=True, stream=True)
+        response.raise_for_status()
+        content_type = (response.headers.get('Content-Type') or '').lower()
+        iterator = response.iter_content(chunk_size=1024 * 1024)
+        first = next(iterator, b'')
+        probe = first[:512].lower().lstrip()
+        if not first or 'text/html' in content_type or probe.startswith((b'<!doctype', b'<html', b'{')):
+            sys.stderr.write(f'Downloader: media server returned {content_type or "non-video data"} for {media_url}\n')
+            return None
+        with temp.open('wb') as output:
+            output.write(first)
+            for chunk in iterator:
+                if chunk:
+                    output.write(chunk)
+        if temp.stat().st_size < 128 * 1024:
+            sys.stderr.write(f'Downloader: rejected truncated MP4 ({temp.stat().st_size} bytes): {media_url}\n')
+            temp.unlink(missing_ok=True)
+            return None
+        temp.replace(target)
+        return target.resolve()
+    except Exception as exc:
+        temp.unlink(missing_ok=True)
+        sys.stderr.write(f'Downloader: direct session download failed: {type(exc).__name__}: {exc}\n')
+        return None
+
+
 def _download_one(url, folder, quality, cookiefile=None, force=False, session=None):
     import yt_dlp
     before = {p.resolve() for p in Path(folder).rglob('*') if p.is_file()}
@@ -130,6 +195,11 @@ def _download_one(url, folder, quality, cookiefile=None, force=False, session=No
         import json
         print('YPROGRESS:' + json.dumps(payload, ensure_ascii=False), flush=True)
 
+    headers = {'User-Agent': UA, 'Referer': url}
+    if session is not None:
+        cookie_header = '; '.join(f'{c.name}={c.value}' for c in session.cookies)
+        if cookie_header:
+            headers['Cookie'] = cookie_header
     opts = {
         'format': _format(quality),
         'paths': {'home': str(folder)},
@@ -143,7 +213,7 @@ def _download_one(url, folder, quality, cookiefile=None, force=False, session=No
         'socket_timeout': 30,
         'merge_output_format': 'mp4',
         'cookiefile': cookiefile,
-        'http_headers': {'User-Agent': UA, 'Referer': url},
+        'http_headers': headers,
         'progress_hooks': [progress],
         'quiet': False,
         'no_warnings': False,
@@ -151,29 +221,31 @@ def _download_one(url, folder, quality, cookiefile=None, force=False, session=No
     if quality == 'audio':
         opts['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}]
 
-    attempts = [url]
-    if session is not None:
-        for direct in _direct_media(session, url):
-            if direct not in attempts:
-                attempts.append(direct)
-
+    direct_urls = _direct_media(session, url) if session is not None else []
+    attempts = [url] + [direct for direct in direct_urls if direct != url]
     last = None
     for target in attempts:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([target])
-            after = [p.resolve() for p in Path(folder).rglob('*') if p.is_file() and p.resolve() not in before]
-            if after:
-                for p in after:
-                    print('YFILE:' + str(p), flush=True)
+            created = _valid_new_files(folder, before)
+            if created:
+                for path in created:
+                    print('YFILE:' + str(path), flush=True)
                 return True
-        except Exception as e:
-            last = e
-            sys.stderr.write(f'XMegaDrive: download attempt failed for {target}: {type(e).__name__}: {e}\n')
+        except Exception as exc:
+            last = exc
+            sys.stderr.write(f'Downloader: yt-dlp attempt failed for {target}: {type(exc).__name__}: {exc}\n')
+
+    if session is not None:
+        for direct in direct_urls:
+            path = _download_direct_session(session, direct, url, folder, force)
+            if path:
+                print('YFILE:' + str(path), flush=True)
+                return True
     if last:
         raise last
     return False
-
 
 def _read_archive(path):
     p = Path(path)

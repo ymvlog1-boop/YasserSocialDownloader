@@ -17,9 +17,12 @@ def main():
             sys.stderr.write('ERROR: engine failure ('+type(error).__name__+')\n');sys.exit(1)
         return
     from PySide6.QtCore import Qt,QTimer,QLockFile
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication,QMessageBox
     from app.core import Store
     app=QApplication(sys.argv);app.setApplicationName('Yasser Social Downloader');app.setLayoutDirection(Qt.RightToLeft)
+    icon_root=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent));icon=icon_root/'assets'/'app-icon.svg'
+    if icon.exists():app.setWindowIcon(QIcon(str(icon)))
     try:
         store=Store(); lock=QLockFile(str(store.root/'app.lock'));lock.setStaleLockTime(0)
         if not lock.tryLock(100):QMessageBox.information(None,'أداة ياسر','البرنامج مفتوح بالفعل.');return

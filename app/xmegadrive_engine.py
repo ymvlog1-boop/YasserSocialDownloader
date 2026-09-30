@@ -203,10 +203,11 @@ def run(argv):
     folder.mkdir(parents=True, exist_ok=True)
     session = _session(ns.cookies)
     parts = [p for p in urlsplit(ns.url).path.split('/') if p]
-    is_tag = len(parts) >= 2 and parts[0].lower() in ('tag', 'tags')
-    urls = _discover_tag(session, ns.url) if is_tag else [ns.url]
+    host = (urlsplit(ns.url).hostname or '').lower().removeprefix('www.')
+    is_collection = (len(parts) >= 2 and parts[0].lower() in ('tag', 'tags')) or (host == 'x-fetish.tube' and (not parts or parts[0].lower() in ('models', 'videos')))
+    urls = _discover_tag(session, ns.url) if is_collection else [ns.url]
     if not urls:
-        sys.stderr.write('XMegaDrive: no video links found on tag page.\n')
+        sys.stderr.write('Downloader: no video links found on collection page.\n')
         return 2
 
     done = _read_archive(ns.archive)

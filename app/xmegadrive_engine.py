@@ -14,8 +14,12 @@ except ImportError:
 
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0 Safari/537.36'
-VIDEO_PATH_RE = re.compile(r'/(?:videos?|watch)/[^"\'<>\s?#]+', re.I)
-MEDIA_URL_RE = re.compile(r'https?://[^"\'<>\s]+?\.(?:m3u8|mp4)/?(?:\?[^"\'<>\s]*)?', re.I)
+VIDEO_PATH_RE = re.compile(r'/(?:videos?|watch)/[^"\'< >\s?#]+'.replace('< >','<>'), re.I)
+MEDIA_URL_RE = re.compile(r'https?://[^"\'< >\s]+?\.(?:m3u8|mp4)/?(?:\?[^"\'< >\s]*)?'.replace('< >','<>'), re.I)
+PLAYER_MEDIA_RE = re.compile(
+    r'''(?:video_url|video_alt_url\d*|video_url_text)\s*:\s*["'](https?://[^"']+)["']''',
+    re.I,
+)
 
 
 def _session(cookiefile=None):
@@ -84,7 +88,6 @@ def _discover_tag(session, start_url, max_pages=250):
                 looks_page = re.search(r'(?:/page/\d+/|/\d+/|[?&](?:page|paged|p)=\d+)', link, re.I)
                 if same_tag and looks_page and link not in seen_pages and link not in queue:
                     queue.append(link)
-        # Fallback for sites that render relative video paths outside href attributes.
         for match in VIDEO_PATH_RE.findall(text.replace('\\/', '/')):
             link = urljoin(final_url, match)
             if _is_video_url(link, host) and link not in videos:
@@ -107,7 +110,13 @@ def _direct_media(session, page_url):
         return []
     cleaned = html.unescape(text).replace('\\/', '/').replace('\\u0026', '&')
     found = []
-    for u in MEDIA_URL_RE.findall(cleaned):
+    # KVS exposes the playable file in video_url. Other MP4-like values can
+    # be tracking pixels or hover previews, so prioritize player fields.
+    candidates = PLAYER_MEDIA_RE.findall(cleaned) + MEDIA_URL_RE.findall(cleaned)
+    for u in candidates:
+        lower = urlsplit(u).path.lower()
+        if '/contents/videos_screenshots/' in lower or re.search(r'(?:^|_)preview(?:_|\.|$)', lower):
+            continue
         if u not in found:
             found.append(u)
     return found
@@ -152,20 +161,22 @@ def _download_direct_session(session, media_url, page_url, folder, force=False):
         'Range': 'bytes=0-',
     }
     try:
-        response = session.get(media_url, headers=headers, timeout=60, allow_redirects=True, stream=True)
-        response.raise_for_status()
-        content_type = (response.headers.get('Content-Type') or '').lower()
-        iterator = response.iter_content(chunk_size=1024 * 1024)
-        first = next(iterator, b'')
-        probe = first[:512].lower().lstrip()
-        if not first or 'text/html' in content_type or probe.startswith((b'<!doctype', b'<html', b'{')):
-            sys.stderr.write(f'Downloader: media server returned {content_type or "non-video data"} for {media_url}\n')
-            return None
-        with temp.open('wb') as output:
-            output.write(first)
-            for chunk in iterator:
-                if chunk:
-                    output.write(chunk)
+        with session.get(media_url, headers=headers, timeout=60, allow_redirects=True, stream=True) as response:
+            response.raise_for_status()
+            content_type = (response.headers.get('Content-Type') or '').lower()
+            iterator = response.iter_content(chunk_size=1024 * 1024)
+            first = next(iterator, b'')
+            probe = first[:512].lower().lstrip()
+            is_mp4 = len(first) >= 12 and first[4:8] == b'ftyp'
+            is_video_type = content_type.startswith('video/') or 'octet-stream' in content_type
+            if not first or not (is_mp4 or is_video_type) or probe.startswith((b'<!doctype', b'<html', b'{', b'gif8')):
+                sys.stderr.write(f'Downloader: media server returned {content_type or "non-video data"} for {media_url}\n')
+                return None
+            with temp.open('wb') as output:
+                output.write(first)
+                for chunk in iterator:
+                    if chunk:
+                        output.write(chunk)
         if temp.stat().st_size < 128 * 1024:
             sys.stderr.write(f'Downloader: rejected truncated MP4 ({temp.stat().st_size} bytes): {media_url}\n')
             temp.unlink(missing_ok=True)
@@ -246,6 +257,7 @@ def _download_one(url, folder, quality, cookiefile=None, force=False, session=No
     if last:
         raise last
     return False
+
 
 def _read_archive(path):
     p = Path(path)

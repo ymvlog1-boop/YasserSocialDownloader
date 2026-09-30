@@ -23,6 +23,12 @@ class BackendRoutingTests(unittest.TestCase):
         self.assertFalse(is_profile_url('instagram','https://www.instagram.com/reel/ABC/'))
         self.assertFalse(is_profile_url('twitter','https://x.com/example/status/1'))
         self.assertFalse(is_profile_url('tiktok','https://www.tiktok.com/@example/video/123'))
+        for platform,url in [
+            ('xmegadrive','https://www.xmegadrive.com/search/Edyn-Blair/'),
+            ('xmegadrive','https://www.xmegadrive.com/categories/milf/'),
+            ('xfetish','https://x-fetish.tube/tags/femdom-sex/'),
+            ('xxxtube','https://x-x-x.tube/models/auroraxoxo/')]:
+            self.assertTrue(is_profile_url(platform,url))
 
     def test_profile_username_extraction(self):
         self.assertEqual(profile_username('instagram','https://www.instagram.com/model.one/'),'model.one')

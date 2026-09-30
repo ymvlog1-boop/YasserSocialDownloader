@@ -23,10 +23,8 @@ def is_profile_url(platform, url):
         # Profile/page roots and /videos are profile-like. Individual reel/watch/posts are not.
         lower = [p.lower() for p in parts]
         return not any(p in ('reel', 'reels', 'watch', 'photo.php', 'posts', 'videos.php') for p in lower[1:]) and 'watch' not in lower[:1]
-    if platform == 'xmegadrive':
-        return len(parts) >= 2 and parts[0].lower() in ('tags', 'tag')
-    if platform == 'xfetish':
-        return not parts or (len(parts) >= 2 and parts[0].lower() == 'models') or (parts and parts[0].lower() == 'videos')
+    if platform in ('xmegadrive', 'xfetish', 'xxxtube'):
+        return not parts or (len(parts) >= 2 and parts[0].lower() in ('models', 'tags', 'tag', 'search', 'categories'))
     return False
 
 
@@ -47,10 +45,8 @@ def profile_username(platform, url):
         return None
     parsed = urlsplit(url)
     parts = _path_parts(url)
-    if platform == 'xmegadrive':
+    if platform in ('xmegadrive', 'xfetish', 'xxxtube'):
         candidate = parts[1] if len(parts) > 1 else 'xmegadrive'
-    elif platform == 'xfetish':
-        candidate = parts[1] if len(parts) > 1 and parts[0].lower() == 'models' else 'all-videos'
     elif platform == 'tiktok':
         candidate = parts[0].lstrip('@')
     elif platform == 'facebook' and parts and parts[0].lower() == 'profile.php':
@@ -256,7 +252,7 @@ def command(task, store, cookie_path=None):
     target_url = task['url']
     profile = is_profile_url(task['platform'], task['url'])
 
-    if task.get('platform') in ('xmegadrive', 'xfetish'):
+    if task.get('platform') in ('xmegadrive', 'xfetish', 'xxxtube'):
         engine = 'xmegadrive'
     elif phase == 'facebook_videos':
         engine = 'facebook'

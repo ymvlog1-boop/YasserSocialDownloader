@@ -1,10 +1,10 @@
-import json, os, sqlite3, time, uuid
+import json, os, shutil, sqlite3, time, uuid
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from http.cookiejar import MozillaCookieJar
 
-PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك', 'xmegadrive': 'XMegaDrive', 'xfetish': 'X-Fetish'}
-DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok','xmegadrive.com':'xmegadrive','x-fetish.tube':'xfetish'}
+PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك', 'xmegadrive': 'XMegaDrive', 'xfetish': 'X-Fetish', 'xxxtube': 'X-X-X Tube'}
+DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok','xmegadrive.com':'xmegadrive','x-fetish.tube':'xfetish','x-x-x.tube':'xxxtube'}
 STATES = {'queued':'بانتظار التحميل','running':'جاري التحميل','paused':'تم الإيقاف مؤقتًا','completed':'تم التحميل بنجاح','partial':'اكتمل جزئيًا','failed':'فشل التحميل','cancelled':'تم الإلغاء','skipped':'محمّل مسبقًا','empty':'لم تُوجد ملفات جديدة'}
 
 def detect(url):
@@ -28,7 +28,7 @@ def cookie_check(path, platform):
         domains = [d for d,p in DOMAINS.items() if p == platform]
         relevant = [c for c in jar if any(c.domain.lstrip('.') == d or c.domain.lstrip('.').endswith('.'+d) for d in domains)]
         if not relevant: return False, 'الملف لا يحتوي كوكيز لهذه المنصة'
-        if not any(c.expires is None or c.expires > time.time() for c in relevant): return False, 'انتهت صلاحية الكوكيز'
+        if not any(c.expires is None or c.expires > time.time() for c in relevant): return False, 'جلسة الكوكيز منتهية، قم بتجديدها'
         return True, 'صالح محليًا — قبول الموقع غير مختبر'
     except Exception:
         return False, 'ملف الكوكيز غير صالح بصيغة Netscape'
@@ -61,6 +61,42 @@ class Store:
     def delete(self,id): self.db.execute('DELETE FROM tasks WHERE id=?',(id,)); self.db.commit()
     def folder(self): return self.get('folder',str(Path.home()/'Downloads'/'Yasser Social Downloader'))
 
-def new_task(url,folder,media='auto',quality='best',cookies=False,force=False):
+    def import_cookie(self, source, platform):
+        """Keep a private durable copy so restarting never loses the session file."""
+        valid, message = cookie_check(source, platform)
+        if not valid:
+            raise ValueError(message)
+        target_dir = self.root / 'saved-cookies'
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / (platform + '.txt')
+        shutil.copy2(source, target)
+        if os.name != 'nt':
+            os.chmod(target, 0o600)
+        self.set('cookie_' + platform, str(target))
+        return str(target), message
+
+    def remove_cookie(self, platform):
+        path = self.get('cookie_' + platform)
+        self.set('cookie_' + platform, None)
+        try:
+            p = Path(path or '')
+            if p.parent == self.root / 'saved-cookies':
+                p.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def queue_followed(self):
+        """Queue followed pages once on startup while preserving their archive/id."""
+        changed = []
+        for task in self.tasks():
+            if task.get('follow') and task.get('state') not in ('queued', 'running'):
+                task.update(state='queued', progress=0, force=False,
+                            message='جاري فحص الصفحة المتابعة لتنزيل الجديد فقط…')
+                task.pop('phase', None)
+                self.save(task)
+                changed.append(task['id'])
+        return changed
+
+def new_task(url,folder,media='auto',quality='best',cookies=False,force=False,follow=False):
     platform,url=detect(url)
-    return dict(id=uuid.uuid4().hex,url=url,platform=platform,folder=folder,media=media,quality=quality,cookies=cookies,force=force,state='queued',progress=0,files=[],created=time.strftime('%Y-%m-%d %H:%M'),message='',attempt=0)
+    return dict(id=uuid.uuid4().hex,url=url,platform=platform,folder=folder,media=media,quality=quality,cookies=cookies,force=force,follow=follow,state='queued',progress=0,files=[],created=time.strftime('%Y-%m-%d %H:%M'),message='',attempt=0)

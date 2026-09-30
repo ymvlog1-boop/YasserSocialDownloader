@@ -54,7 +54,34 @@ def _same_site(hostname, root_host):
 
 def _is_video_url(url, host):
     p = urlsplit(url)
-    return _same_site(p.hostname, host) and re.search(r'/(?:videos?|watch)/', p.path, re.I)
+    # Collection pages also contain /videos/. A detail URL must have a slug or
+    # numeric id after that segment; otherwise it is pagination/navigation.
+    parts = [part for part in p.path.split('/') if part]
+    if not _same_site(p.hostname, host) or not parts or parts[0].lower() not in ('video', 'videos', 'watch'):
+        return False
+    return len(parts) >= 2 and not (len(parts) == 2 and parts[1].isdigit())
+
+
+def _is_collection_page(link, start, host):
+    p = urlsplit(link)
+    if not _same_site(p.hostname, host):
+        return False
+    root = start.path.rstrip('/') + '/'
+    path = p.path.rstrip('/') + '/'
+    if not path.startswith(root):
+        return False
+    # Follow the model/category/tag/search "videos" landing page and numbered
+    # pages below it. Ignore sorting links except post_date to avoid duplicates.
+    query = p.query.lower()
+    if 'by=' in query and 'by=post_date' not in query:
+        return False
+    return bool(
+        path == root
+        or path == root + 'videos/'
+        or re.search(r'/videos/(?:page/)?\d+/$', path, re.I)
+        or re.search(r'/(?:page/)?\d+/$', path, re.I)
+        or re.search(r'(?:^|&)(?:page|paged|p|from)=\d+', query, re.I)
+    )
 
 
 def _discover_tag(session, start_url, max_pages=250):
@@ -83,10 +110,7 @@ def _discover_tag(session, start_url, max_pages=250):
                 if normalized not in videos:
                     videos.append(normalized)
             elif _same_site(p.hostname, host):
-                path = p.path.rstrip('/') + '/'
-                same_tag = path.startswith(tag_prefix)
-                looks_page = re.search(r'(?:/page/\d+/|/\d+/|[?&](?:page|paged|p)=\d+)', link, re.I)
-                if same_tag and looks_page and link not in seen_pages and link not in queue:
+                if _is_collection_page(link, start, host) and link not in seen_pages and link not in queue:
                     queue.append(link)
         for match in VIDEO_PATH_RE.findall(text.replace('\\/', '/')):
             link = urljoin(final_url, match)
@@ -288,7 +312,7 @@ def run(argv):
     session = _session(ns.cookies)
     parts = [p for p in urlsplit(ns.url).path.split('/') if p]
     host = (urlsplit(ns.url).hostname or '').lower().removeprefix('www.')
-    is_collection = (len(parts) >= 2 and parts[0].lower() in ('tag', 'tags')) or (host == 'x-fetish.tube' and (not parts or parts[0].lower() in ('models', 'videos')))
+    is_collection = not parts or (len(parts) >= 2 and parts[0].lower() in ('models', 'tag', 'tags', 'search', 'categories'))
     urls = _discover_tag(session, ns.url) if is_collection else [ns.url]
     if not urls:
         sys.stderr.write('Downloader: no video links found on collection page.\n')

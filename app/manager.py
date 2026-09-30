@@ -17,12 +17,13 @@ class DownloadManager(QObject):
     def __init__(self, store):
         super().__init__()
         self.store = store
+        store.queue_followed()
         self.tasks = store.tasks()
         self.active, self.buffers, self.errors, self.technical = {}, {}, {}, {}
         self.stops, self.trees, self.decoders = {}, {}, {}
         self.cookies = CookieCopies(store.root)
         for task in self.tasks:
-            if task['state'] in ('running', 'queued'):
+            if task['state'] == 'running':
                 task.update(state='paused', message='استعد التحميل عند الرغبة؛ تُستكمل الأجزاء حيث يدعم المحرك ذلك.')
                 store.save(task)
         self.timer = QTimer(self)

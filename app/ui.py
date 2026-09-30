@@ -1,6 +1,6 @@
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl, QTimer
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFrame,QStackedWidget,QPlainTextEdit,QGroupBox,QComboBox,QCheckBox,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,QFileDialog,QMessageBox,QSpinBox,QLineEdit,QProgressBar,QScrollArea)
 from .core import PLATFORMS,STATES,detect,new_task,cookie_check
 from .backend import prepare_profile_folder
@@ -21,6 +21,8 @@ class Window(QMainWindow):
     def __init__(self,store):
         super().__init__(); self.store=store; self.manager=DownloadManager(store)
         self.setWindowTitle('Yasser Social Downloader — أداة ياسر لتحميل الوسائط'); self.resize(1240,820); self.setMinimumSize(960,680); self.setStyleSheet(STYLE)
+        icon=Path(__file__).resolve().parents[1]/'assets'/'app-icon.svg'
+        if icon.exists():self.setWindowIcon(QIcon(str(icon)))
         root=QWidget(); self.setCentralWidget(root); layout=QHBoxLayout(root); layout.setContentsMargins(20,20,20,20); layout.setSpacing(24)
         side=QFrame(); side.setObjectName('sidebar'); side.setFixedWidth(230); nav=QVBoxLayout(side); nav.setContentsMargins(18,24,18,24)
         nav.addWidget(label('YASSER\nSOCIAL DOWNLOADER','brand')); nav.addWidget(label('أداة ياسر لتحميل الوسائط','muted')); nav.addSpacing(30)
@@ -56,6 +58,7 @@ class Window(QMainWindow):
         self.media.currentIndexChanged.connect(self.option_state)
         r.addWidget(label('نوع التحميل')); r.addWidget(self.media,1); r.addWidget(label('الجودة')); r.addWidget(self.quality,1); opt.addLayout(r)
         self.use_cookie=QCheckBox('استخدام ملف الكوكيز المحفوظ'); self.use_cookie.setChecked(True); opt.addWidget(self.use_cookie); opt.addWidget(label('مفعّل افتراضيًا للاستقرار. أزل العلامة فقط إذا أردت المحاولة بدون كوكيز.','muted'))
+        self.follow=QCheckBox('متابعة هذه الصفحة وتنزيل الجديد فقط عند تشغيل البرنامج'); opt.addWidget(self.follow)
         self.force=QCheckBox('فرض إعادة التنزيل'); opt.addWidget(self.force); v.addWidget(group)
         self.notice=label('الاستكمال يعتمد على دعم الموقع والمحرك. ملفات الحسابات قد تتطلب كوكيز.','muted'); v.addWidget(self.notice)
         r=QHBoxLayout(); r.addWidget(button('تحميل الآن',lambda:self.enqueue(True),True)); r.addWidget(button('إضافة إلى قائمة التحميل',lambda:self.enqueue(False))); r.addWidget(button('فتح مجلد التحميل',lambda:self.open_path(self.store.folder()))); v.addLayout(r); v.addStretch()
@@ -78,7 +81,7 @@ class Window(QMainWindow):
                     ok,msg=cookie_check(self.store.get('cookie_'+p,''),p)
                     if not ok:self.go(3); raise ValueError(PLATFORMS[p]+': '+msg)
                 folder=str(Path(self.store.folder())/p) if self.store.get('organize',True) else self.store.folder()
-                t=new_task(url,folder,self.media.currentData(),self.quality.currentData() if self.media.currentData()=='video' else 'best',self.use_cookie.isChecked(),self.force.isChecked())
+                t=new_task(url,folder,self.media.currentData(),self.quality.currentData() if self.media.currentData()=='video' else 'best',self.use_cookie.isChecked(),self.force.isChecked(),self.follow.isChecked())
                 prepare_profile_folder(t)
                 if not start:t['state']='paused'; t['message']='أضيف إلى القائمة؛ اختر استكمال التحميل للبدء.'
                 pending.append(t)
@@ -95,7 +98,7 @@ class Window(QMainWindow):
         r=QHBoxLayout()
         for text,action in [('إيقاف مؤقت','pause'),('استكمال / إعادة المحاولة','retry'),('إلغاء','cancel'),('إزالة','remove')]:r.addWidget(button(text,lambda checked=False,a=action:self.action(self.queue,a)))
         v.addLayout(r); r=QHBoxLayout()
-        for text,action in [('فتح الملف','file'),('فتح المجلد','folder'),('التفاصيل التقنية','details'),('تغيير وضع الكوكيز','cookie')]:r.addWidget(button(text,lambda checked=False,a=action:self.action(self.queue,a)))
+        for text,action in [('فتح الملف','file'),('فتح المجلد','folder'),('التفاصيل التقنية','details'),('تغيير وضع الكوكيز','cookie'),('متابعة / إيقاف المتابعة','follow')]:r.addWidget(button(text,lambda checked=False,a=action:self.action(self.queue,a)))
         v.addLayout(r)
     def history_page(self):
         v=self.page('سجل التحميلات','سجل محلي محفوظ على جهازك. حذف السجل لا يحذف ملفات الوسائط.'); self.history=self.table(); self.history.itemSelectionChanged.connect(lambda:self.remember_selection(self.history)); v.addWidget(self.history,1); r=QHBoxLayout()
@@ -131,6 +134,9 @@ class Window(QMainWindow):
         elif a=='cookie':
             if t['id'] in self.manager.active:return self.info('أوقف المهمة أولًا لتغيير وضع الكوكيز.')
             t['cookies']=not t['cookies']; self.store.save(t); self.info('استخدام ملف الكوكيز' if t['cookies'] else 'بدون كوكيز')
+        elif a=='follow':
+            t['follow']=not t.get('follow',False); self.store.save(t)
+            self.info('تم تفعيل المتابعة: سيفحص البرنامج الصفحة عند التشغيل وينزل الجديد فقط.' if t['follow'] else 'تم إيقاف متابعة هذه الصفحة.')
     def clear_history(self):
         if QMessageBox.question(self,'مسح السجل','هل تريد مسح سجل المهام المنتهية؟')==QMessageBox.Yes:
             for t in list(self.manager.tasks):
@@ -140,7 +146,8 @@ class Window(QMainWindow):
             selected=self.selected(table); id=selected['id'] if selected else None
             table.blockSignals(True); table.setRowCount(len(tasks))
             for row,t in enumerate(tasks):
-                values=[PLATFORMS[t['platform']]+'\n\u2066'+t['url']+'\u2069',STATES[t['state']], '',str(len(t['files'])),t['created']]
+                followed=' • متابَع' if t.get('follow') else ''
+                values=[PLATFORMS[t['platform']]+followed+'\n\u2066'+t['url']+'\u2069',STATES[t['state']], '',str(len(t['files'])),t['created']]
                 for col,value in enumerate(values):
                     item=QTableWidgetItem(value); item.setData(Qt.UserRole,t['id']); item.setToolTip(t.get('message','')); table.setItem(row,col,item)
                 bar=QProgressBar(); bar.setLayoutDirection(Qt.LeftToRight)
@@ -154,7 +161,7 @@ class Window(QMainWindow):
     def show_detail(self):
         t=self.selected(self.queue); self.detail.setText(t.get('message','') if t else 'اختر مهمة لعرض حالتها')
     def cookies_page(self):
-        v=self.page('إدارة ملفات الكوكيز','يُحفظ مسار الملف فقط. الفحص محلي ولا يثبت قبول الجلسة لدى الموقع.'); self.cookie_labels={}
+        v=self.page('إدارة ملفات الكوكيز','يحفظ البرنامج نسخة آمنة محلية من الجلسة ويستخدمها بعد إعادة التشغيل حتى تنتهي صلاحيتها.'); self.cookie_labels={}
         for p,name in PLATFORMS.items():
             group=QGroupBox(name); g=QVBoxLayout(group); status=label(self.cookie_status(p),'muted'); self.cookie_labels[p]=status; g.addWidget(status); r=QHBoxLayout()
             r.addWidget(button('اختيار / تغيير الملف',lambda checked=False,p=p:self.choose_cookie(p))); r.addWidget(button('فحص الملف',lambda checked=False,p=p:self.check_cookie(p))); r.addWidget(button('إزالة الملف',lambda checked=False,p=p:self.remove_cookie(p))); g.addLayout(r); v.addWidget(group)
@@ -166,9 +173,9 @@ class Window(QMainWindow):
         if path:
             ok,msg=cookie_check(path,p)
             if not ok:return self.info(msg)
-            self.store.set('cookie_'+p,path); self.cookie_labels[p].setText(Path(path).name+' — '+msg)
+            saved,msg=self.store.import_cookie(path,p); self.cookie_labels[p].setText(Path(saved).name+' — '+msg)
     def check_cookie(self,p):self.cookie_labels[p].setText(cookie_check(self.store.get('cookie_'+p,''),p)[1])
-    def remove_cookie(self,p):self.store.set('cookie_'+p,None);self.cookie_labels[p].setText('لا يوجد ملف كوكيز محدد')
+    def remove_cookie(self,p):self.store.remove_cookie(p);self.cookie_labels[p].setText('لا يوجد ملف كوكيز محدد')
     def settings_page(self):
         v=self.page('الإعدادات','تفضيلات محفوظة تلقائيًا على جهازك.'); v.addWidget(label('مجلد التحميل الافتراضي')); self.folder=QLineEdit(self.store.folder()); self.folder.setReadOnly(True); self.folder.setLayoutDirection(Qt.LeftToRight); v.addWidget(self.folder); v.addWidget(button('اختيار مجلد التحميل',self.choose_folder))
         org=QCheckBox('تنظيم المنشورات المفردة في مجلد مستقل لكل منصة');org.setChecked(self.store.get('organize',True));org.toggled.connect(lambda x:self.store.set('organize',x));v.addWidget(org)

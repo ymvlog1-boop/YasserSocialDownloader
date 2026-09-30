@@ -5,7 +5,7 @@ from app.backend import command
 
 class CoreTests(unittest.TestCase):
     def test_domains(self):
-        for url,p in [('https://www.instagram.com/p/a','instagram'),('https://x.com/a/status/1','twitter'),('https://fb.watch/abc','facebook'),('https://vm.tiktok.com/abc','tiktok'),('https://x-fetish.tube/models/goddess-nixie/','xfetish')]:self.assertEqual(detect(url)[0],p)
+        for url,p in [('https://www.instagram.com/p/a','instagram'),('https://x.com/a/status/1','twitter'),('https://fb.watch/abc','facebook'),('https://vm.tiktok.com/abc','tiktok'),('https://x-fetish.tube/models/goddess-nixie/','xfetish'),('https://x-x-x.tube/models/auroraxoxo/','xxxtube')]:self.assertEqual(detect(url)[0],p)
         for url in ['https://x.com.evil.com/a','file:///C:/test','https://evil.com/?x.com','https://user:pass@x.com','https://x.com:8888/a']:
             with self.assertRaises(ValueError):detect(url)
     def test_persistence(self):
@@ -16,6 +16,14 @@ class CoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/'cookies.txt';path.write_text('# Netscape HTTP Cookie File\n.x.com\tTRUE\t/\tTRUE\t'+str(int(time.time()+3600))+'\tauth_token\tsecret\n')
             self.assertTrue(cookie_check(str(path),'twitter')[0]);self.assertFalse(cookie_check(str(path),'instagram')[0]);path.write_text('bad');self.assertFalse(cookie_check(str(path),'twitter')[0])
+    def test_cookie_is_copied_and_followed_task_is_requeued(self):
+        with tempfile.TemporaryDirectory() as d:
+            source=Path(d)/'source.txt';source.write_text('# Netscape HTTP Cookie File\n.x.com\tTRUE\t/\tTRUE\t'+str(int(time.time()+3600))+'\tauth_token\tsecret\n')
+            s=Store(Path(d)/'data');saved,_=s.import_cookie(source,'twitter');source.unlink()
+            self.assertTrue(Path(saved).is_file())
+            task=new_task('https://x.com/example',d,follow=True);task['state']='completed';s.save(task)
+            self.assertEqual(s.queue_followed(),[task['id']]);queued=s.tasks()[0]
+            self.assertEqual(queued['state'],'queued');self.assertFalse(queued['force']);s.db.close()
     def test_safe_arguments(self):
         with tempfile.TemporaryDirectory() as d:
             s=Store(d);t=new_task('https://x.com/u/status/1?arg=$(test)',d,media='video');args,kind=command(t,s)

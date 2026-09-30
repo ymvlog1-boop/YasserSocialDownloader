@@ -15,7 +15,7 @@ except ImportError:
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0 Safari/537.36'
 VIDEO_PATH_RE = re.compile(r'/(?:videos?|watch)/[^"\'<>\s?#]+', re.I)
-MEDIA_URL_RE = re.compile(r'https?://[^"\'<>\s]+?\.(?:m3u8|mp4)(?:\?[^"\'<>\s]*)?', re.I)
+MEDIA_URL_RE = re.compile(r'https?://[^"\'<>\s]+?\.(?:m3u8|mp4)/?(?:\?[^"\'<>\s]*)?', re.I)
 
 
 def _session(cookiefile=None):

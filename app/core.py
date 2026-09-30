@@ -3,8 +3,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from http.cookiejar import MozillaCookieJar
 
-PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك', 'xmegadrive': 'XMegaDrive'}
-DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok','xmegadrive.com':'xmegadrive'}
+PLATFORMS = {'instagram': 'إنستغرام', 'twitter': 'إكس / تويتر', 'facebook': 'فيسبوك', 'tiktok': 'تيك توك', 'xmegadrive': 'XMegaDrive', 'xfetish': 'X-Fetish'}
+DOMAINS = {'instagram.com':'instagram','x.com':'twitter','twitter.com':'twitter','facebook.com':'facebook','fb.watch':'facebook','tiktok.com':'tiktok','xmegadrive.com':'xmegadrive','x-fetish.tube':'xfetish'}
 STATES = {'queued':'بانتظار التحميل','running':'جاري التحميل','paused':'تم الإيقاف مؤقتًا','completed':'تم التحميل بنجاح','partial':'اكتمل جزئيًا','failed':'فشل التحميل','cancelled':'تم الإلغاء','skipped':'محمّل مسبقًا','empty':'لم تُوجد ملفات جديدة'}
 
 def detect(url):

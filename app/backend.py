@@ -25,6 +25,8 @@ def is_profile_url(platform, url):
         return not any(p in ('reel', 'reels', 'watch', 'photo.php', 'posts', 'videos.php') for p in lower[1:]) and 'watch' not in lower[:1]
     if platform == 'xmegadrive':
         return len(parts) >= 2 and parts[0].lower() in ('tags', 'tag')
+    if platform == 'xfetish':
+        return not parts or (len(parts) >= 2 and parts[0].lower() == 'models') or (parts and parts[0].lower() == 'videos')
     return False
 
 
@@ -47,6 +49,8 @@ def profile_username(platform, url):
     parts = _path_parts(url)
     if platform == 'xmegadrive':
         candidate = parts[1] if len(parts) > 1 else 'xmegadrive'
+    elif platform == 'xfetish':
+        candidate = parts[1] if len(parts) > 1 and parts[0].lower() == 'models' else 'all-videos'
     elif platform == 'tiktok':
         candidate = parts[0].lstrip('@')
     elif platform == 'facebook' and parts and parts[0].lower() == 'profile.php':
@@ -252,7 +256,7 @@ def command(task, store, cookie_path=None):
     target_url = task['url']
     profile = is_profile_url(task['platform'], task['url'])
 
-    if task.get('platform') == 'xmegadrive':
+    if task.get('platform') in ('xmegadrive', 'xfetish'):
         engine = 'xmegadrive'
     elif phase == 'facebook_videos':
         engine = 'facebook'
@@ -292,7 +296,7 @@ def command(task, store, cookie_path=None):
         args = _video_args(task, store, cookie_path if task['cookies'] else None, target_url)
     elif engine == 'xmegadrive':
         folder = Path(task['folder']); folder.mkdir(parents=True, exist_ok=True)
-        args = ['--url', task['url'], '--folder', str(folder), '--archive', str(store.root / ('archive-' + task['id'] + '-xmegadrive.txt')), '--quality', task['quality']]
+        args = ['--url', task['url'], '--folder', str(folder), '--archive', str(store.root / ('archive-' + task['id'] + '-' + task['platform'] + '.txt')), '--quality', task['quality']]
         if cookie_path and task['cookies']:
             args += ['--cookies', cookie_path]
         if task['force']:

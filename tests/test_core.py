@@ -5,7 +5,7 @@ from app.backend import command
 
 class CoreTests(unittest.TestCase):
     def test_domains(self):
-        for url,p in [('https://www.instagram.com/p/a','instagram'),('https://x.com/a/status/1','twitter'),('https://fb.watch/abc','facebook'),('https://vm.tiktok.com/abc','tiktok')]:self.assertEqual(detect(url)[0],p)
+        for url,p in [('https://www.instagram.com/p/a','instagram'),('https://x.com/a/status/1','twitter'),('https://fb.watch/abc','facebook'),('https://vm.tiktok.com/abc','tiktok'),('https://x-fetish.tube/models/goddess-nixie/','xfetish')]:self.assertEqual(detect(url)[0],p)
         for url in ['https://x.com.evil.com/a','file:///C:/test','https://evil.com/?x.com','https://user:pass@x.com','https://x.com:8888/a']:
             with self.assertRaises(ValueError):detect(url)
     def test_persistence(self):
